@@ -151,7 +151,7 @@ uaa:
 proxy:
   http_proxy: <%= p("http_proxy") %>
   https_proxy: <%= p("https_proxy") %>
-  no_proxy: <%= p("no_proxy") %>
+  no_proxy: 127.0.0.1,localhost,.local,.internal,log,db,redis,nginx,core,portal,postgresql,jobservice,registry,registryctl,clair,<%= p("no_proxy") %>
   components:
     - core
     - jobservice
