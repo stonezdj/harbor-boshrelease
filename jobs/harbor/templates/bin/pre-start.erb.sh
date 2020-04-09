@@ -166,64 +166,19 @@ loadImages() {
   $DOCKER_CMD load -i $HARBOR_IMAGES_TAR_PATH 2>&1
 }
 
-#Upgrade Harbor if higher version of Harbor to be installed, only consider version>1.6.0
+#Upgrade Harbor if higher version of Harbor to be installed, upgrade when version>=1.9.0
 upgradeHarbor() {
   INSTALLED_HARBOR_VERSION=`cat $HARBOR_VERSION_FILE`
   <%- if p("enable_upgrade") -%>
-  result=$(checkHarborVersion)
-  case $result in
-    -1)
-      log "Can not upgrade Harbor from $INSTALLED_HARBOR_VERSION to $HARBOR_FULL_VERSION. Aborted."
-      exit 1
-      ;;
-    1)
-      log "Upgrading Harbor $INSTALLED_HARBOR_VERSION to $HARBOR_FULL_VERSION ..."
-      ;;
-    2)
-      # Harbor is not installed before. No need to upgrade.
-      return
-      ;;
-    0)
-      # Already installed. No need to upgrade.
-      return
-      ;;
-  esac
-
-  if [ -z "$INSTALLED_HARBOR_VERSION" ]; then
-    log "file /data/harbor_version is not found or invalid, please upgrade to harbor tile 1.5.2 or newer, then upgrade to this version"
-    exit 1
+  main_version=$(echo $HARBOR_VERSION |awk -F'.' '{ printf "%d.%2d", $1, $2 }')
+  if [[ "$main_version" < "1. 9" ]]; then
+          log "Current version is older than 1.9, please upgrade to Harbor tile 1.9 first."
+          exit 1
   fi
-
-  if [ $(compareVersion $INSTALLED_HARBOR_VERSION "1.6.0") = "-1" ]; then
-
-    MIGRATE_DOCKER_CMD="$DOCKER_CMD run -i --rm -e DB_USR=root -e SKIP_CONFIRM=y "
-    HARBOR_MIGRATOR_TAG=$($DOCKER_CMD images | grep harbor-migrator | grep $HARBOR_MIGRATOR_VERSION | awk '{print $2}')
-    log "Use harbor-migrator:$HARBOR_MIGRATOR_TAG for migration"
-    log "Backing up Harbor database"
-    $MIGRATE_DOCKER_CMD -e DB_PWD=$HARBOR_DB_PWD -v /data/database:/var/lib/mysql -v $HARBOR_DB_BACKUP_DIR:/harbor-migration/backup goharbor/harbor-migrator:$HARBOR_MIGRATOR_TAG --db backup
-
-    log "Migrating Harbor database"
-    $MIGRATE_DOCKER_CMD -e DB_PWD=$HARBOR_DB_PWD -e PGDATA=/var/lib/postgresql/data -v /data/database:/var/lib/mysql goharbor/harbor-migrator:$HARBOR_MIGRATOR_TAG --db up
-    log "Migrating clair DB"
-    $MIGRATE_DOCKER_CMD -e PGDATA=/var/lib/postgresql/data  -v /data/clair-db/:/clair-db -v /data/database:/var/lib/postgresql/data goharbor/harbor-migrator:$HARBOR_MIGRATOR_TAG --db up
-    log "Migrating notary DB"
-    $MIGRATE_DOCKER_CMD -e PGDATA=/var/lib/postgresql/data -v /data/notary-db/:/var/lib/mysql -v /data/database:/var/lib/postgresql/data goharbor/harbor-migrator:$HARBOR_MIGRATOR_TAG --db up
-
-  else
-    # After Harbor 1.6.0, database is postgresql, it migration is handled by program internally 
-    echo "Skip to use migrator to upgrade harbor after 1.6.0"
-  fi
-
-  # Cleanup all unused image and reload image again.
-  $DOCKER_CMD image prune -a -f
-  loadImages
-
-  # Fix notary db schema error between 1.5.0 and 1.6.3
-  log "Upgrade notary db"
-  source $PACKAGE_DIR/harbor-common/notary-migration-fix.sh
-
   <%- end -%>
 }
+
+
 
 # Setup NFS directory and update docker-compose.yml
 function setupNFS() {
